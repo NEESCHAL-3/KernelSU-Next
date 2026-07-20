@@ -1,4 +1,6 @@
 #include <asm/current.h>
+#include <asm/processor.h>
+#include <asm/ptrace.h>
 #include <linux/compat.h>
 #include <linux/cred.h>
 #include <linux/err.h>
@@ -62,8 +64,11 @@ static const struct ksu_feature_handler su_compat_handler = {
 
 static void __user *userspace_stack_buffer(const void *data, size_t len)
 {
-	char __user *ptr =
-		(void __user *)current_user_stack_pointer() - len;
+	unsigned long user_sp;
+	char __user *ptr;
+
+	user_sp = user_stack_pointer(task_pt_regs(current));
+	ptr = (char __user *)(user_sp - len);
 
 	return copy_to_user(ptr, data, len) ? NULL : ptr;
 }
