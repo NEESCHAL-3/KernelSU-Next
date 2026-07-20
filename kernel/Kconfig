@@ -2,7 +2,6 @@ menu "KernelSU"
 
 config KSU
 	tristate "KernelSU function support"
-	depends on KPROBES && EXT4_FS
 	default y
 	help
 	  Enable kernel-level root privileges on Android System.
@@ -34,5 +33,80 @@ config KSU_DISABLE_POLICY
 	  Disable per-app root/non-root profile customization.
 	  Escalation will always use the default full root profile, and
 	  non-root handling will follow the global umount policy only.
+
+menu "KernelSU - SUSFS"
+
+config KSU_SUSFS
+	bool "KernelSU addon - SUSFS"
+	depends on KSU
+	depends on THREAD_INFO_IN_TASK
+	default y
+	help
+	  Enable SUSFS integration for KernelSU.
+
+config KSU_SUSFS_SUS_PATH
+	bool "Enable suspicious-path hiding"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Allow configured paths and their subpaths to be filtered.
+
+config KSU_SUSFS_SUS_MOUNT
+	bool "Enable suspicious-mount hiding"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Hide configured mounts and provide adjusted mount identifiers.
+
+config KSU_SUSFS_SUS_KSTAT
+	bool "Enable suspicious-kstat spoofing"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Allow configured file and directory metadata to be replaced.
+
+config KSU_SUSFS_SPOOF_UNAME
+	bool "Enable uname spoofing"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Allow the uname result to be replaced with configured values.
+
+config KSU_SUSFS_ENABLE_LOG
+	bool "Enable SUSFS kernel logging"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Enable SUSFS informational and error messages in the kernel log.
+
+config KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+	bool "Hide KernelSU and SUSFS symbols"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Filter KernelSU and SUSFS symbols from proc kallsyms output.
+
+config KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+	bool "Enable bootconfig or cmdline spoofing"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Replace proc bootconfig or proc cmdline output using configured data.
+
+config KSU_SUSFS_OPEN_REDIRECT
+	bool "Enable path-open redirection"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Redirect a configured source path to another existing path.
+
+config KSU_SUSFS_SUS_MAP
+	bool "Enable mapped-file filtering"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Filter configured file-backed mappings from supported proc interfaces.
+
+endmenu
 
 endmenu
