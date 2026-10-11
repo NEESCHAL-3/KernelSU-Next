@@ -107,9 +107,9 @@ int __init kernelsu_init(void)
 #endif // #ifdef KSU_SUSFS
 
 #ifdef KSU_MANAGER_PACKAGE
-	pr_info("welcome to KernelSU version " __stringify(KERNEL_SU_VERSION) ", package name " KSU_MANAGER_PACKAGE "\n");
+	pr_info("welcome to KernelSU version " __stringify(KSU_VERSION) ", package name " KSU_MANAGER_PACKAGE "\n");
 #else
-	pr_info("welcome to KernelSU version " __stringify(KERNEL_SU_VERSION) "\n");
+	pr_info("welcome to KernelSU version " __stringify(KSU_VERSION) "\n");
 #endif
 #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
     // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
