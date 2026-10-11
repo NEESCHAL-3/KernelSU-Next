@@ -75,6 +75,7 @@ import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.ui.LocalScrollState
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.rememberScrollConnection
 import com.rifsxd.ksunext.ui.component.SearchAppBar
 import com.rifsxd.ksunext.ui.util.SulogEntry
@@ -185,7 +186,8 @@ fun SuLogScreen(
                         .fillMaxSize()
                 ) {
                     val scrollState = LocalScrollState.current
-                    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+                    val navBarEnabled = LocalNavBarEnabled.current
+                    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
                     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
 
                     LazyColumn(
@@ -507,9 +509,14 @@ fun SulogScreen(navigator: DestinationsNavigator) {
         visibleEntries = uiState.visibleEntries,
         errorMessage = uiState.errorMessage,
     )
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+
     val actions = SulogActions(
         onBack = dropUnlessResumed { navigator.popBackStack() },
-        onRefresh = { viewModel.refreshLatest(refreshing = true) },
+        onRefresh = {
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            viewModel.refreshLatest(refreshing = true)
+        },
         onEnableSulog = viewModel::enableSulog,
         onCleanFile = viewModel::cleanFile,
         onSearchTextChange = viewModel::setSearchText,

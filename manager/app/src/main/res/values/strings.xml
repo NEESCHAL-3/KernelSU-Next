@@ -145,6 +145,8 @@
     <string name="restart_app">Restart</string>
     <string name="settings_amoled_mode">AMOLED mode</string>
     <string name="settings_amoled_mode_summary">Enable a pure black theme useful for AMOLED screens to reduce eye strain and save battery.</string>
+    <string name="settings_navbar">Navigation bar</string>
+    <string name="settings_navbar_summary">Enable the bottom navigation bar.</string>
     <string name="restart_required">Restart required</string>
     <string name="restart_app_message">The app needs to restart for this change to take effect.</string>
     <string name="failed_to_update_sepolicy">Failed to update SELinux rules for %s</string>
@@ -311,4 +313,15 @@
     <string name="require_manager_version">The current KernelSU-Next manager version %1$d is too low for KernelSU-Next to work properly. Please upgrade manager to version %2$d or higher!</string>
     <string name="require_kernel_version">The current KernelSU-Next version %1$d is too low for the manager to work properly. Please upgrade to version %2$d or higher!</string>
     <string name="require_kernel_version_gki">Kernel update required</string>
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_summary">Require authentication when opening the app.</string>
+    <string name="settings_app_lock_timeout">Grace period</string>
+    <string name="settings_app_lock_timeout_immediate">Immediate</string>
+    <string name="settings_app_lock_timeout_1m">1 minute</string>
+    <string name="settings_app_lock_timeout_5m">5 minutes</string>
+    <string name="settings_app_lock_no_credential">Secure screen lock required.</string>
+    <string name="biometric_prompt_subtitle">Unlock Manager</string>
+    <string name="biometric_prompt_subtitle_module">Unlock %1$s</string>
+    <string name="enable_risk">Enable risk detection</string>
+    <string name="enable_risk_summary">Enable install-time risk detection for modules.</string>
 </resources>

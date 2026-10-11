@@ -15,6 +15,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.ViewCarousel
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.Dock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -24,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.LocalScrollState
 import com.rifsxd.ksunext.ui.rememberScrollConnection
 import androidx.compose.ui.res.stringResource
@@ -71,7 +74,8 @@ fun CustomizationScreen(navigator: DestinationsNavigator) {
     val ksuVersion = if (isManager) Natives.version else null
 
     val scrollState = LocalScrollState.current
-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarEnabled = LocalNavBarEnabled.current
+    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
 
     val context = LocalContext.current
@@ -173,6 +177,22 @@ fun CustomizationScreen(navigator: DestinationsNavigator) {
                     activity?.setAmoledMode(checked)
                     enableAmoled = checked
                 }
+            }
+
+            var enableNavBar by rememberSaveable {
+                mutableStateOf(
+                    prefs.getBoolean("enable_navbar", true)
+                )
+            }
+            val activity = LocalContext.current as? MainActivity
+            SwitchItem(
+                icon = Icons.Filled.Dock,
+                title = stringResource(id = R.string.settings_navbar),
+                summary = stringResource(id = R.string.settings_navbar_summary),
+                checked = enableNavBar
+            ) { checked ->
+                activity?.setNavBarEnabled(checked)
+                enableNavBar = checked
             }
         }
     }

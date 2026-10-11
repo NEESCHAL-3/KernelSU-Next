@@ -82,6 +82,7 @@ import com.rifsxd.ksunext.ui.webui.WebUIActivity
 import com.rifsxd.ksunext.ui.util.restartActivity
 import com.rifsxd.ksunext.ui.util.module.LatestVersionInfo
 import com.rifsxd.ksunext.ui.viewmodel.ModuleViewModel
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.LocalScrollState 
 import com.rifsxd.ksunext.ui.screen.BottomBarDestination
 import com.rifsxd.ksunext.ui.trackScroll 
@@ -113,7 +114,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     val bottomBarScrollState = LocalScrollState.current
 
     val scrollState = LocalScrollState.current
-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarEnabled = LocalNavBarEnabled.current
+    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
     
     // Create scroll connection for bottom bar
@@ -134,6 +136,16 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 onInstallClick = {
                     navigator.navigate(InstallScreenDestination)
                 },
+                onSettingsClick = {
+                    navigator.navigate(SettingScreenDestination) {
+                        popUpTo(NavGraphs.root.startRoute) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                navBarEnabled = LocalNavBarEnabled.current?.value ?: true,
                 scrollBehavior = scrollBehavior
             )
         },
@@ -216,12 +228,17 @@ fun HomeScreen(navigator: DestinationsNavigator) {
             val requiresNewKernel = isManager && kernelUAPIVersion != null && managerUAPIVersion > kernelUAPIVersion
             val requiresNewManager = isManager && kernelUAPIVersion != null && managerUAPIVersion < kernelUAPIVersion
 
+            // Jailbreak mode runs on locked bootloaders, so flashing a boot image would brick the device.
+            val canInstallKernelUpdate = lkmMode == true && !Natives.isLateLoadMode
+
             if (requiresNewKernel) {
                 WarningCard(
                     stringResource(
-                        id = if (lkmMode == true) R.string.require_kernel_version else R.string.require_kernel_version_gki
+                        id = if (canInstallKernelUpdate) R.string.require_kernel_version else R.string.require_kernel_version_gki,
+                        kernelUAPIVersion!!,
+                        managerUAPIVersion
                     ),
-                    onClick = if (lkmMode == true) {
+                    onClick = if (canInstallKernelUpdate) {
                         { navigator.navigate(InstallScreenDestination) }
                     } else null
                 )
@@ -230,7 +247,9 @@ fun HomeScreen(navigator: DestinationsNavigator) {
             if (requiresNewManager) {
                 WarningCard(
                     stringResource(
-                        id = R.string.require_manager_version
+                        id = R.string.require_manager_version,
+                        managerUAPIVersion,
+                        kernelUAPIVersion!!
                     )
                 )
             }
@@ -313,8 +332,10 @@ private fun ModuleCard(onClick: (() -> Unit)? = null) {
     val count = getModuleCount()
     val moduleViewModel: ModuleViewModel = viewModel()
 
-    val moduleUpdateCount = moduleViewModel.moduleList.count {
-        moduleViewModel.checkUpdate(it).first.isNotEmpty()
+    val moduleUpdateCount = remember(moduleViewModel.moduleList) {
+        moduleViewModel.moduleList.count { module ->
+            module.enabled && (moduleViewModel.checkUpdate(module).first.isNotEmpty())
+        }
     }
 
     // State machine: 0 = nothing, 1 = show "+ Update!", 2 = show "+ X"
@@ -641,6 +662,8 @@ private fun TopBar(
     kernelVersion: KernelVersion,
     ksuVersion: Int?,
     onInstallClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    navBarEnabled: Boolean,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     var isSpinning by remember { mutableStateOf(false) }
@@ -663,7 +686,6 @@ private fun TopBar(
     ) { }
 
     val context = LocalContext.current
-
     TopAppBar(
         title = {
             Row(
@@ -695,6 +717,15 @@ private fun TopBar(
             }
         },
         actions = {
+            if (!navBarEnabled) {
+                IconButton(onClick = onSettingsClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = stringResource(id = R.string.settings)
+                    )
+                }
+            }
+
             if (ksuVersion != null) {
                 IconButton(onClick = onInstallClick) {
                     Icon(
@@ -967,24 +998,94 @@ fun WarningCard(
     }
 }
 
+private data class HomeInfoSnapshot(
+    val managerVersion: Pair<String, Long> = "" to 0L,
+    val managerUAPIVersion: Int = 0,
+    val managerAppId: Int = 0,
+    val hookMode: String? = null,
+    val metaModule: String? = null,
+    val metaInfo: ModuleViewModel.ModuleInfo? = null,
+    val suSFS: String? = null,
+    val suSFSVersion: String? = null,
+    val suSFSVariant: String? = null,
+    val zygiskEnabled: Boolean = false,
+    val zygiskInfo: ModuleViewModel.ModuleInfo? = null,
+    val unameRelease: String = "",
+    val unameMachine: String = "",
+    val seccompStatus: String = "Unavailable",
+)
+
+private fun buildHomeInfoSnapshot(
+    context: Context,
+    ksuVersion: Int?,
+    moduleList: List<ModuleViewModel.ModuleInfo>,
+): HomeInfoSnapshot {
+    val managerVersion = getManagerVersion(context)
+    val managerUAPIVersion = Natives.managerUAPIVersion
+    val managerAppId = Natives.getManagerAppid()
+    val hookMode = if (ksuVersion == null) null else {
+        Natives.getHookMode().takeUnless { it.isNullOrBlank() } ?: "Unavailable"
+    }
+    val metaModule = if (ksuVersion == null) null else getMetaModule()
+    val metaInfo = if (metaModule == null) null else moduleList.firstOrNull { it.isMetaModule }
+    val suSFS = if (ksuVersion == null) null else getSuSFS()
+    val suSFSVersion = if (suSFS == "Supported" && ksuVersion != null) getSuSFSVersion() else null
+    val suSFSVariant = if (suSFS == "Supported" && ksuVersion != null) getSuSFSVariant() else null
+    val zygiskEnabled = if (ksuVersion == null) false else Natives.isZygiskEnabled()
+    val zygiskInfo = if (!zygiskEnabled) null else moduleList.firstOrNull { it.isZygisk && it.enabled }
+    val uname = kotlin.runCatching { Os.uname() }.getOrNull()
+    val statusInt = kotlin.runCatching { Os.prctl(21, 0, 0, 0, 0) }.getOrDefault(-1)
+    val seccompStatus = when (statusInt) {
+        -1 -> "Unavailable"
+        0 -> "Disabled"
+        1 -> "Strict"
+        2 -> "Filter"
+        else -> "Unknown"
+    }
+
+    return HomeInfoSnapshot(
+        managerVersion = managerVersion,
+        managerUAPIVersion = managerUAPIVersion,
+        managerAppId = managerAppId,
+        hookMode = hookMode,
+        metaModule = metaModule,
+        metaInfo = metaInfo,
+        suSFS = suSFS,
+        suSFSVersion = suSFSVersion,
+        suSFSVariant = suSFSVariant,
+        zygiskEnabled = zygiskEnabled,
+        zygiskInfo = zygiskInfo,
+        unameRelease = uname?.release.orEmpty(),
+        unameMachine = uname?.machine.orEmpty(),
+        seccompStatus = seccompStatus,
+    )
+}
+
 @Composable
 private fun InfoCard(autoExpand: Boolean = false) {
     val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
 
-    val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-
-    val isManager = Natives.isManager
-    val ksuVersion = if (isManager) Natives.version else null
+    val isManager = remember { Natives.isManager }
+    val ksuVersion = remember(isManager) { if (isManager) Natives.version else null }
 
     var expanded by rememberSaveable { mutableStateOf(false) }
-
-    val developerOptionsEnabled = prefs.getBoolean("enable_developer_options", false)
+    val developerOptionsEnabled = remember(prefs) { prefs.getBoolean("enable_developer_options", false) }
 
     LaunchedEffect(autoExpand) {
         if (autoExpand) {
             expanded = true
         }
-    }   
+    }
+
+    val moduleViewModel: ModuleViewModel = viewModel()
+    var homeInfo by remember { mutableStateOf(HomeInfoSnapshot()) }
+
+    LaunchedEffect(ksuVersion, moduleViewModel.moduleList) {
+        homeInfo = withContext(Dispatchers.IO) {
+            buildHomeInfoSnapshot(context, ksuVersion, moduleViewModel.moduleList)
+        }
+    }
 
     Card {
         Column(
@@ -1025,48 +1126,35 @@ private fun InfoCard(autoExpand: Boolean = false) {
             }
 
             Column {
-                val managerVersion = getManagerVersion(context)
-                val managerUAPIVersion = Natives.managerUAPIVersion
                 InfoCardItem(
                     label = stringResource(R.string.home_manager_version),
-                    content = if (
-                        developerOptionsEnabled
-                    ) {
-                        "${managerVersion.first} (${managerVersion.second}-${managerUAPIVersion}) | UID: ${Natives.getManagerAppid()}"
+                    content = if (developerOptionsEnabled) {
+                        "${homeInfo.managerVersion.first} (${homeInfo.managerVersion.second}-${homeInfo.managerUAPIVersion}) | UID: ${homeInfo.managerAppId}"
                     } else {
-                        "${managerVersion.first} (${managerVersion.second}-${managerUAPIVersion})"
+                        "${homeInfo.managerVersion.first} (${homeInfo.managerVersion.second}-${homeInfo.managerUAPIVersion})"
                     },
                     icon = Icons.Filled.AutoAwesomeMotion,
                 )
 
                 if (ksuVersion != null) {
-
-                    val hookMode =
-                        Natives.getHookMode()
-                            .takeUnless { it.isNullOrBlank() }
-                            ?: stringResource(R.string.unavailable)
-
                     Spacer(Modifier.height(16.dp))
-
                     InfoCardItem(
-                        label   = stringResource(R.string.hook_mode),
-                        content = hookMode,
-                        icon    = Icons.Filled.Phishing,
+                        label = stringResource(R.string.hook_mode),
+                        content = homeInfo.hookMode ?: stringResource(R.string.unavailable),
+                        icon = Icons.Filled.Phishing,
                     )
                 }
 
                 if (ksuVersion != null) {
-                    val metaModule = getMetaModule()
-                    val moduleViewModel: ModuleViewModel = viewModel()
-                    val metaInfo = moduleViewModel.moduleList.firstOrNull { it.isMetaModule }
+                    val metaInfo = homeInfo.metaInfo
                     val metaDetail = if (metaInfo != null) " | ${metaInfo.name} | ${metaInfo.version}" else ""
                     Spacer(Modifier.height(16.dp))
                     InfoCardItem(
                         label = stringResource(R.string.home_metamodule_status),
                         content = when {
-                            metaModule == "Installed" && metaInfo != null && !metaInfo.enabled ->
+                            homeInfo.metaModule == "Installed" && metaInfo != null && !metaInfo.enabled ->
                                 stringResource(R.string.disabled) + metaDetail
-                            metaModule == "Installed" ->
+                            homeInfo.metaModule == "Installed" ->
                                 stringResource(R.string.installed) + metaDetail
                             else ->
                                 stringResource(R.string.home_not_installed)
@@ -1074,19 +1162,18 @@ private fun InfoCard(autoExpand: Boolean = false) {
                         icon = Icons.Filled.SettingsSuggest
                     )
 
-                    val suSFS = getSuSFS()
-                    if (suSFS == "Supported") {
+                    if (homeInfo.suSFS == "Supported") {
                         Spacer(Modifier.height(16.dp))
                         InfoCardItem(
                             label = stringResource(R.string.home_susfs_version),
-                            content = "${stringResource(R.string.supported)} | ${getSuSFSVersion()} (${getSuSFSVariant()})",
+                            content = "${stringResource(R.string.supported)} | ${homeInfo.suSFSVersion ?: stringResource(R.string.unavailable)} (${homeInfo.suSFSVariant ?: stringResource(R.string.unavailable)})",
                             icon = painterResource(R.drawable.ic_sus),
                         )
                     }
 
-                    if (Natives.isZygiskEnabled()) {
+                    if (homeInfo.zygiskEnabled) {
                         Spacer(Modifier.height(16.dp))
-                        val zygiskInfo = moduleViewModel.moduleList.firstOrNull { it.isZygisk && it.enabled }
+                        val zygiskInfo = homeInfo.zygiskInfo
                         val zygiskDetail = if (zygiskInfo != null) " | ${zygiskInfo.name} | ${zygiskInfo.version}" else ""
                         InfoCardItem(
                             label = stringResource(R.string.zygisk_status),
@@ -1097,12 +1184,11 @@ private fun InfoCard(autoExpand: Boolean = false) {
                 }
 
                 AnimatedVisibility(visible = expanded) {
-                    val uname = Os.uname()
                     Column {
                         Spacer(Modifier.height(16.dp))
                         InfoCardItem(
                             label = stringResource(R.string.home_kernel),
-                            content = "${uname.release} (${uname.machine})",
+                            content = "${homeInfo.unameRelease} (${homeInfo.unameMachine})",
                             icon = painterResource(R.drawable.ic_linux),
                         )
 
@@ -1127,23 +1213,10 @@ private fun InfoCard(autoExpand: Boolean = false) {
                             icon = Icons.Filled.Security,
                         )
 
-                        
-                        val statusInt = kotlin.runCatching {
-                            Os.prctl(21, 0, 0, 0, 0)
-                        }.getOrDefault(-1)
-
-                        val seccompStatus = when (statusInt) {
-                            -1 -> stringResource(R.string.seccomp_status_not_supported)
-                            0 -> stringResource(R.string.seccomp_status_disabled)
-                            1 -> stringResource(R.string.seccomp_status_strict)
-                            2 -> stringResource(R.string.seccomp_status_filter)
-                            else -> stringResource(R.string.seccomp_status_unknown)
-                        }
-
                         Spacer(Modifier.height(16.dp))
                         InfoCardItem(
                             label = stringResource(R.string.home_seccomp_status),
-                            content = seccompStatus,
+                            content = homeInfo.seccompStatus,
                             icon = Icons.Filled.LocalPolice
                         )
                     }
@@ -1151,15 +1224,14 @@ private fun InfoCard(autoExpand: Boolean = false) {
 
                 Spacer(Modifier.height(16.dp))
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center
                 ) {
                     val rotationAngle by animateFloatAsState(
                         targetValue = if (expanded) 180f else 0f,
                         animationSpec = tween(durationMillis = 300)
                     )
-                    
+
                     IconButton(
                         onClick = { expanded = !expanded },
                         modifier = Modifier.size(36.dp)

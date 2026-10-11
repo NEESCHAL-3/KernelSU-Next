@@ -10,7 +10,7 @@ use crate::lkm_image::BootPatchV2Args;
 use crate::module::regenerate_preinit_rc;
 use crate::{
     apk_sign, assets, debug, defs, init_event, ksu_uapi, ksucalls, module, module_config, sulog,
-    susfsd, utils,
+    susfsd, utils, risk,
 };
 
 /// KernelSU Next userspace cli
@@ -325,6 +325,24 @@ enum Module {
         #[command(subcommand)]
         command: ModuleConfigCmd,
     },
+
+    /// manage module install-time risk detection
+    Risk {
+        #[command(subcommand)]
+        command: RiskCmd,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum RiskCmd {
+    /// enable risk detection
+    Enable,
+
+    /// disable risk detection
+    Disable,
+
+    /// show risk detection status
+    Status,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -537,7 +555,7 @@ pub fn run() -> Result<()> {
     log::info!("command: {:?}", cli.command);
 
     let result = match cli.command {
-        Commands::PostFsData => init_event::on_post_data_fs(),
+        Commands::PostFsData => init_event::on_post_fs_data(),
         Commands::BootCompleted => {
             init_event::on_boot_completed();
             Ok(())
@@ -554,6 +572,11 @@ pub fn run() -> Result<()> {
                 Module::Action { id } => module::run_action(&id),
                 Module::Metamodule => module::is_metamodule_installed(),
                 Module::List => module::list_modules(),
+                Module::Risk { command } => match command {
+                    RiskCmd::Enable => risk::set_risk_detection_enabled(true),
+                    RiskCmd::Disable => risk::set_risk_detection_enabled(false),
+                    RiskCmd::Status => risk::risk_detection_status(),
+                },
                 Module::Config { internal, command } => {
                     let module_id = match internal {
                         Some(internal_name) => format!("internal.{internal_name}"),
@@ -793,7 +816,7 @@ pub fn run() -> Result<()> {
             full_args.extend(args);
             crate::resetprop::resetprop_main(&full_args)
         }
-        Commands::SoftReboot => init_event::soft_reboot(),
+        Commands::SoftReboot => crate::soft_reboot::soft_reboot(),
 
         Commands::Insmod { module, params } => debug::insmod(&module, &params),
 

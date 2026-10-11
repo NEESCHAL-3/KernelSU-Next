@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.LocalScrollState
 import com.rifsxd.ksunext.ui.rememberScrollConnection
 import androidx.compose.ui.res.stringResource
@@ -56,6 +57,9 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.URL
 import android.content.Intent
+
+private const val NET_CONNECT_TIMEOUT_MS = 15_000
+private const val NET_READ_TIMEOUT_MS = 15_000
 
 data class MetaModule(
     val id: String,
@@ -100,11 +104,13 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
     val snackBarHost = LocalSnackbarHost.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     val isManager = Natives.isManager
     val ksuVersion = if (isManager) Natives.version else null
     val scrollState = LocalScrollState.current
-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarEnabled = LocalNavBarEnabled.current
+    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
     val modulesJsonUrl = "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next-Modules-Repo/refs/heads/main/meta_modules.json"
 
@@ -127,6 +133,8 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
         return withContext(Dispatchers.IO) {
             try {
                 val conn = URL(jsonUrl).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = NET_CONNECT_TIMEOUT_MS
+                conn.readTimeout = NET_READ_TIMEOUT_MS
                 conn.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
                 val text = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
                 conn.disconnect()
@@ -251,6 +259,7 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
                         .padding(paddingValues),
                     isRefreshing = isRefreshing,
                     onRefresh = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         scope.launch {
                             moduleState = MetaModuleState.Loading
                             loadModules()
@@ -610,6 +619,8 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfo? {
         try {
             val stars = try {
                 val htmlConn = URL(repoUrl).openConnection() as java.net.HttpURLConnection
+                htmlConn.connectTimeout = NET_CONNECT_TIMEOUT_MS
+                htmlConn.readTimeout = NET_READ_TIMEOUT_MS
                 htmlConn.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
                 htmlConn.setRequestProperty("Accept", "text/html")
                 val html = BufferedReader(InputStreamReader(htmlConn.inputStream)).use { it.readText() }
@@ -625,6 +636,8 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfo? {
             // ── Latest release ZIP ───────────────────────────────────────────
             val latestUrl = "$repoUrl/releases/latest"
             val connection = URL(latestUrl).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = NET_CONNECT_TIMEOUT_MS
+            connection.readTimeout = NET_READ_TIMEOUT_MS
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
 
@@ -643,6 +656,8 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfo? {
 
             val releasePageUrl = "$repoUrl/releases/expanded_assets/$tagMatch"
             val pageConnection = URL(releasePageUrl).openConnection()
+            pageConnection.connectTimeout = NET_CONNECT_TIMEOUT_MS
+            pageConnection.readTimeout = NET_READ_TIMEOUT_MS
             pageConnection.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
 
             val pageHtml = BufferedReader(InputStreamReader(pageConnection.getInputStream())).use {
